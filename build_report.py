@@ -6,8 +6,9 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 import os
+from pathlib import Path
 
-BASE = r"C:\Users\HI TCC\Downloads\BTLHocMay"
+BASE = str(Path(__file__).resolve().parent)
 REPORT_DIR = os.path.join(BASE, "01_Report")
 FIGS = os.path.join(BASE, "03_SourceCode", "notebooks", "figures")
 OUT = os.path.join(REPORT_DIR, "BaoCao_Nhom_Framingham_TV2.docx")

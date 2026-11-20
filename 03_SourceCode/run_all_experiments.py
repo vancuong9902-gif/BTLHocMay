@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from pathlib import Path
 
 from sklearn.model_selection import StratifiedKFold, cross_validate, learning_curve, validation_curve, GridSearchCV
 from sklearn.pipeline import Pipeline
@@ -17,13 +18,13 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import LinearSVC, SVC
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.metrics import (roc_auc_score, recall_score, f1_score, precision_score, 
+from sklearn.metrics import (roc_auc_score, recall_score, f1_score, precision_score,
                              accuracy_score, confusion_matrix, roc_curve)
 
 sys.path.append(os.path.abspath('..'))
 from src.features import load_and_split_data, get_preprocessor_pipeline
 
-base_dir = r'C:\Users\HI TCC\Downloads\BTLHocMay\03_SourceCode'
+base_dir = str(Path(__file__).resolve().parent)
 data_path = os.path.join(base_dir, 'data', 'framingham.csv')
 X_train, X_test, y_train, y_test = load_and_split_data(data_path=data_path, test_size=0.2, random_state=42)
 

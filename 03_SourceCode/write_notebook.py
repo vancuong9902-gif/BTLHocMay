@@ -325,10 +325,10 @@ notebook = {
   {
    "cell_type": "markdown",
    "metadata": {},
-   "source": [
-    "## 8. Linear SVM - GridSearchCV\n",
-    "T\u01b1i \u01b0u h\u00f3a tham so C cho Linear SVM"
-   ]
+"source": [
+     "## 8. Linear SVM - GridSearchCV\n",
+     "T\u01b0i \u01b0u h\u00f3a tham so C v\u00e0 class_weight cho Linear SVM"
+    ]
   },
   {
    "cell_type": "code",
@@ -344,7 +344,8 @@ notebook = {
     "\n",
     "# 8.2. Parameter Grid cho Linear SVM\n",
     "param_grid_svm_linear = {\n",
-    "    'classifier__C': [0.01, 0.1, 1, 10, 100]\n",
+    "    'classifier__C': [0.01, 0.1, 1, 10, 100],\n",
+    "    'classifier__class_weight': [None, 'balanced']\n",
     "}\n",
     "\n",
     "print(f'Tong so to hop tham so: {len(param_grid_svm_linear[\"classifier__C\"])}')"
@@ -420,10 +421,10 @@ notebook = {
   {
    "cell_type": "markdown",
    "metadata": {},
-   "source": [
-    "## 9. RBF SVM - GridSearchCV\n",
-    "T\u01b1i \u01b0u h\u00f3a tham so C v\u00e0 gamma cho RBF SVM"
-   ]
+"source": [
+     "## 9. RBF SVM - GridSearchCV\n",
+     "T\u01b0i \u01b0u h\u00f3a tham so C, gamma v\u00e0 class_weight cho RBF SVM"
+    ]
   },
   {
    "cell_type": "code",
@@ -440,7 +441,8 @@ notebook = {
     "# 9.2. Parameter Grid cho RBF SVM\n",
     "param_grid_svm_rbf = {\n",
     "    'classifier__C': [0.1, 1, 10, 100],\n",
-    "    'classifier__gamma': ['scale', 0.001, 0.01, 0.1, 1]\n",
+    "    'classifier__gamma': ['scale', 0.001, 0.01, 0.1, 1],\n",
+    "    'classifier__class_weight': [None, 'balanced']\n",
     "}\n",
     "\n",
     "total_rbf = len(param_grid_svm_rbf['classifier__C']) * len(param_grid_svm_rbf['classifier__gamma'])\n",
