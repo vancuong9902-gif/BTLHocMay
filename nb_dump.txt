@@ -1,0 +1,594 @@
+=== CODE CELL 2 ===
+# 2. Import thư viện
+import warnings
+warnings.filterwarnings('ignore')
+
+import os
+import sys
+import time
+import json
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import joblib
+
+from sklearn.model_selection import (
+    train_test_split,
+    GridSearchCV,
+    StratifiedKFold,
+    cross_validate,
+    learning_curve,
+    validation_curve
+)
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score,
+    confusion_matrix,
+    classification_report,
+    roc_curve
+)
+
+# Thêm src vào path để import TV1 preprocessing
+sys.path.append(os.path.abspath('..'))
+from src.features import (
+    load_and_split_data,
+    get_preprocessor_pipeline,
+    TARGET_COLUMN
+)
+
+# Cấu hình biểu đồ
+plt.style.use('seaborn-v0_8-whitegrid')
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 100)
+pd.set_option('display.width', 1000)
+
+print('Im⊙ Imports thành công!')
+print(f'Im⊙ Working directory: {os.getcwd()}')
+=== CODE CELL 4 ===
+# 3.1. Load và chia dữ liệu
+data_path = '../data/framingham.csv'
+X_train, X_test, y_train, y_test = load_and_split_data(
+    data_path=data_path,
+    test_size=0.2,
+    random_state=42
+)
+
+print(f'X_train shape: {X_train.shape}')
+print(f'X_test shape: {X_test.shape}')
+print(f'y_train distribution: {y_train.value_counts().to_dict()}')
+print(f'y_test distribution: {y_test.value_counts().to_dict()}')
+print(f'Tyệ lệ lớp dương (Train): {y_train.mean():.4f}')
+print(f'Tyệ lệ lớp dương (Test): {y_test.mean():.4f}')
+=== CODE CELL 6 ===
+# 4.1. Lấy preprocessor pipeline từ TV1 (CHƠA FIT)
+preprocessor = get_preprocessor_pipeline()
+print('Preprocessor pipeline:')
+preprocessor
+=== CODE CELL 8 ===
+# 5.1. Cấu hình CV
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+scoring = 'roc_auc'
+
+print(f'CV: {cv}')
+print(f'Scoring: {scoring}')
+=== CODE CELL 10 ===
+# 6.1. Baseline Logistic Regression Pipeline
+lr_pipeline = Pipeline(steps=[
+    ('preprocessor', get_preprocessor_pipeline()),
+    ('classifier', LogisticRegression(
+        class_weight='balanced',
+        random_state=42,
+        max_iter=1000
+    ))
+])
+
+# 6.2. Cross-Validation trên tập Train
+print('Dang chay CV cho Baseline Logistic Regression...')
+start = time.time()
+lr_cv_results = cross_validate(
+    lr_pipeline, X_train, y_train,
+    cv=cv, scoring=['roc_auc', 'recall', 'f1', 'precision', 'accuracy'],
+    return_train_score=True, n_jobs=-1
+)
+lr_cv_time = time.time() - start
+
+# 6.3. Fit trên toàn bộ Train và danh gia Test
+lr_pipeline.fit(X_train, y_train)
+lr_y_pred = lr_pipeline.predict(X_test)
+lr_y_prob = lr_pipeline.predict_proba(X_test)[:, 1]
+
+lr_test_metrics = {
+    'ROC-AUC': roc_auc_score(y_test, lr_y_prob),
+    'Recall': recall_score(y_test, lr_y_pred),
+    'F1-Score': f1_score(y_test, lr_y_pred),
+    'Precision': precision_score(y_test, lr_y_pred),
+    'Accuracy': accuracy_score(y_test, lr_y_pred)
+}
+
+print(f'Im⊙ Baseline CV Time: {lr_cv_time:.1f}s')
+print('--- CV Results (Mean ± Std) ---')
+for metric in ['roc_auc', 'recall', 'f1', 'precision', 'accuracy']:
+    scores = lr_cv_results[f'test_{metric}']
+    print(f'  {metric.upper():10s}: {scores.mean():.4f} ± {scores.std():.4f}')
+print('\n--- Test Set Results ---')
+for k, v in lr_test_metrics.items():
+    print(f'  {k:10s}: {v:.4f}')
+=== CODE CELL 12 ===
+# 7.1. k-NN Pipeline
+knn_pipeline = Pipeline(steps=[
+    ('preprocessor', get_preprocessor_pipeline()),
+    ('classifier', KNeighborsClassifier())
+])
+
+# 7.2. Parameter Grid cho k-NN
+param_grid_knn = {
+    'classifier__n_neighbors': [3, 5, 7, 9, 11, 15, 21],
+    'classifier__weights': ['uniform', 'distance'],
+    'classifier__metric': ['minkowski'],
+    'classifier__p': [1, 2]
+}
+
+total_knn = len(param_grid_knn['classifier__n_neighbors']) * len(param_grid_knn['classifier__weights']) * len(param_grid_knn['classifier__p'])
+print(f'Tong so to hop tham so: {total_knn}')
+=== CODE CELL 13 ===
+# 7.3. GridSearchCV cho k-NN
+print('Dang chay GridSearchCV cho k-NN...')
+start = time.time()
+knn_grid = GridSearchCV(
+    estimator=knn_pipeline,
+    param_grid=param_grid_knn,
+    scoring=scoring,
+    cv=cv,
+    n_jobs=-1,
+    refit=True,
+    return_train_score=True,
+    verbose=1
+)
+knn_grid.fit(X_train, y_train)
+knn_grid_time = time.time() - start
+
+print(f'Im⊙ k-NN GridSearchCV Time: {knn_grid_time:.1f}s')
+print(f'Best params: {knn_grid.best_params_}')
+print(f'Best CV ROC-AUC: {knn_grid.best_score_:.4f}')
+=== CODE CELL 14 ===
+# 7.4. Luu ket qua GridSearchCV k-NN
+knn_results_df = pd.DataFrame(knn_grid.cv_results_)
+knn_results_path = '../models/results/knn_gridsearch_results.csv'
+knn_results_df.to_csv(knn_results_path, index=False)
+print(f'Da luu: {knn_results_path}')
+
+# Hien thi top 10 ket qua
+cols = ['param_classifier__n_neighbors', 'param_classifier__weights', 'param_classifier__p',
+        'mean_test_score', 'std_test_score', 'mean_train_score', 'rank_test_score']
+top10 = knn_results_df[cols].sort_values('rank_test_score').head(10)
+print(top10.to_string(index=False))
+=== CODE CELL 15 ===
+# 7.5. Danh gia best k-NN tren Test set
+best_knn = knn_grid.best_estimator_
+knn_y_pred = best_knn.predict(X_test)
+knn_y_prob = best_knn.predict_proba(X_test)[:, 1]
+
+knn_test_metrics = {
+    'ROC-AUC': roc_auc_score(y_test, knn_y_prob),
+    'Recall': recall_score(y_test, knn_y_pred),
+    'F1-Score': f1_score(y_test, knn_y_pred),
+    'Precision': precision_score(y_test, knn_y_pred),
+    'Accuracy': accuracy_score(y_test, knn_y_pred)
+}
+
+print('--- Best k-NN Test Set Results ---')
+for k, v in knn_test_metrics.items():
+    print(f'  {k:10s}: {v:.4f}')
+=== CODE CELL 17 ===
+# 8.1. Linear SVM Pipeline
+svm_linear_pipeline = Pipeline(steps=[
+    ('preprocessor', get_preprocessor_pipeline()),
+    ('classifier', SVC(kernel='linear', probability=True, random_state=42))
+])
+
+# 8.2. Parameter Grid cho Linear SVM
+param_grid_svm_linear = {
+    'classifier__C': [0.01, 0.1, 1, 10, 100]
+}
+
+print(f'Tong so to hop tham so: {len(param_grid_svm_linear["classifier__C"])}')
+=== CODE CELL 18 ===
+# 8.3. GridSearchCV cho Linear SVM
+print('Dang chay GridSearchCV cho Linear SVM...')
+start = time.time()
+svm_linear_grid = GridSearchCV(
+    estimator=svm_linear_pipeline,
+    param_grid=param_grid_svm_linear,
+    scoring=scoring,
+    cv=cv,
+    n_jobs=-1,
+    refit=True,
+    return_train_score=True,
+    verbose=1
+)
+svm_linear_grid.fit(X_train, y_train)
+svm_linear_time = time.time() - start
+
+print(f'Im⊙ Linear SVM GridSearchCV Time: {svm_linear_time:.1f}s')
+print(f'Best params: {svm_linear_grid.best_params_}')
+print(f'Best CV ROC-AUC: {svm_linear_grid.best_score_:.4f}')
+=== CODE CELL 19 ===
+# 8.4. Luu ket qua GridSearchCV Linear SVM
+svm_linear_results_df = pd.DataFrame(svm_linear_grid.cv_results_)
+svm_linear_path = '../models/results/svm_linear_gridsearch_results.csv'
+svm_linear_results_df.to_csv(svm_linear_path, index=False)
+print(f'Da luu: {svm_linear_path}')
+
+cols = ['param_classifier__C', 'mean_test_score', 'std_test_score', 'mean_train_score', 'rank_test_score']
+print(svm_linear_results_df[cols].sort_values('rank_test_score').to_string(index=False))
+=== CODE CELL 20 ===
+# 8.5. Danh gia best Linear SVM tren Test set
+best_svm_linear = svm_linear_grid.best_estimator_
+svm_linear_y_pred = best_svm_linear.predict(X_test)
+svm_linear_y_prob = best_svm_linear.predict_proba(X_test)[:, 1]
+
+svm_linear_test_metrics = {
+    'ROC-AUC': roc_auc_score(y_test, svm_linear_y_prob),
+    'Recall': recall_score(y_test, svm_linear_y_pred),
+    'F1-Score': f1_score(y_test, svm_linear_y_pred),
+    'Precision': precision_score(y_test, svm_linear_y_pred),
+    'Accuracy': accuracy_score(y_test, svm_linear_y_pred)
+}
+
+print('--- Best Linear SVM Test Set Results ---')
+for k, v in svm_linear_test_metrics.items():
+    print(f'  {k:10s}: {v:.4f}')
+=== CODE CELL 22 ===
+# 9.1. RBF SVM Pipeline
+svm_rbf_pipeline = Pipeline(steps=[
+    ('preprocessor', get_preprocessor_pipeline()),
+    ('classifier', SVC(kernel='rbf', probability=True, random_state=42))
+])
+
+# 9.2. Parameter Grid cho RBF SVM
+param_grid_svm_rbf = {
+    'classifier__C': [0.1, 1, 10, 100],
+    'classifier__gamma': ['scale', 0.001, 0.01, 0.1, 1]
+}
+
+total_rbf = len(param_grid_svm_rbf['classifier__C']) * len(param_grid_svm_rbf['classifier__gamma'])
+print(f'Tong so to hop tham so: {total_rbf}')
+=== CODE CELL 23 ===
+# 9.3. GridSearchCV cho RBF SVM
+print('Dang chay GridSearchCV cho RBF SVM...')
+start = time.time()
+svm_rbf_grid = GridSearchCV(
+    estimator=svm_rbf_pipeline,
+    param_grid=param_grid_svm_rbf,
+    scoring=scoring,
+    cv=cv,
+    n_jobs=-1,
+    refit=True,
+    return_train_score=True,
+    verbose=1
+)
+svm_rbf_grid.fit(X_train, y_train)
+svm_rbf_time = time.time() - start
+
+print(f'Im⊙ RBF SVM GridSearchCV Time: {svm_rbf_time:.1f}s')
+print(f'Best params: {svm_rbf_grid.best_params_}')
+print(f'Best CV ROC-AUC: {svm_rbf_grid.best_score_:.4f}')
+=== CODE CELL 24 ===
+# 9.4. Luu ket qua GridSearchCV RBF SVM
+svm_rbf_results_df = pd.DataFrame(svm_rbf_grid.cv_results_)
+svm_rbf_path = '../models/results/svm_rbf_gridsearch_results.csv'
+svm_rbf_results_df.to_csv(svm_rbf_path, index=False)
+print(f'Da luu: {svm_rbf_path}')
+
+cols = ['param_classifier__C', 'param_classifier__gamma', 'mean_test_score', 'std_test_score', 'mean_train_score', 'rank_test_score']
+print(svm_rbf_results_df[cols].sort_values('rank_test_score').head(10).to_string(index=False))
+=== CODE CELL 25 ===
+# 9.5. Danh gia best RBF SVM tren Test set
+best_svm_rbf = svm_rbf_grid.best_estimator_
+svm_rbf_y_pred = best_svm_rbf.predict(X_test)
+svm_rbf_y_prob = best_svm_rbf.predict_proba(X_test)[:, 1]
+
+svm_rbf_test_metrics = {
+    'ROC-AUC': roc_auc_score(y_test, svm_rbf_y_prob),
+    'Recall': recall_score(y_test, svm_rbf_y_pred),
+    'F1-Score': f1_score(y_test, svm_rbf_y_pred),
+    'Precision': precision_score(y_test, svm_rbf_y_pred),
+    'Accuracy': accuracy_score(y_test, svm_rbf_y_pred)
+}
+
+print('--- Best RBF SVM Test Set Results ---')
+for k, v in svm_rbf_test_metrics.items():
+    print(f'  {k:10s}: {v:.4f}')
+=== CODE CELL 27 ===
+# 10.1. Chay CV chi tiet cho k-NN, Linear SVM, RBF SVM de lay cac metric khac
+print('Dang chay CV chi tiet cho cac mo hinh tot nhat...')
+
+models_cv = {'Logistic Regression': lr_cv_results}
+for name, pipeline in [('k-NN', best_knn), ('Linear SVM', best_svm_linear), ('RBF SVM', best_svm_rbf)]:
+    cv_res = cross_validate(pipeline, X_train, y_train, cv=cv,
+                          scoring=['roc_auc', 'recall', 'f1', 'precision', 'accuracy'],
+                          n_jobs=-1)
+    models_cv[name] = cv_res
+    print(f'  Im⊙ {name} done')
+=== CODE CELL 28 ===
+# 10.2. Bang so sanh Cross-Validation
+cv_comparison = []
+for name, res in models_cv.items():
+    row = {'Model': name}
+    for metric in ['roc_auc', 'recall', 'f1', 'precision', 'accuracy']:
+        scores = res[f'test_{metric}']
+        row[f'CV {metric.upper()} Mean'] = f'{scores.mean():.4f}'
+        row[f'CV {metric.upper()} Std'] = f'{scores.std():.4f}'
+    cv_comparison.append(row)
+
+cv_df = pd.DataFrame(cv_comparison)
+print('=== CROSS-VALIDATION COMPARISON (5-Fold Stratified) ===')
+print(cv_df.to_string(index=False))
+=== CODE CELL 29 ===
+# 10.3. Bang so sanh Holdout Test Set
+test_comparison = []
+for name, metrics in [
+    ('Logistic Regression', lr_test_metrics),
+    ('k-NN', knn_test_metrics),
+    ('Linear SVM', svm_linear_test_metrics),
+    ('RBF SVM', svm_rbf_test_metrics)
+]:
+    row = {'Model': name}
+    row.update(metrics)
+    test_comparison.append(row)
+
+test_df = pd.DataFrame(test_comparison)
+print('=== HOLDOUT TEST SET COMPARISON ===')
+print(test_df.to_string(index=False))
+=== CODE CELL 30 ===
+# 10.4. Bang tong hop hoan chinh
+full_comparison = []
+for name in ['Logistic Regression', 'k-NN', 'Linear SVM', 'RBF SVM']:
+    cv_res = models_cv[name]
+    test_res = {
+        'Logistic Regression': lr_test_metrics,
+        'k-NN': knn_test_metrics,
+        'Linear SVM': svm_linear_test_metrics,
+        'RBF SVM': svm_rbf_test_metrics
+    }[name]
+    
+    row = {'Model': name}
+    for metric in ['roc_auc', 'recall', 'f1', 'precision', 'accuracy']:
+        scores = cv_res[f'test_{metric}']
+        row[f'CV {metric.upper()} (Mean±Std)'] = f'{scores.mean():.4f}±{scores.std():.4f}'
+        row[f'Test {metric.upper()}'] = f'{test_res[metric.upper()]:.4f}'
+    full_comparison.append(row)
+
+full_df = pd.DataFrame(full_comparison)
+print('=== FULL MODEL COMPARISON ===')
+print(full_df.to_string(index=False))
+
+# Luu model_comparison.csv
+comparison_path = '../models/results/model_comparison.csv'
+full_df.to_csv(comparison_path, index=False)
+print(f'\nDa luu: {comparison_path}')
+=== CODE CELL 32 ===
+# 11.1. Confusion Matrix cho 4 mo hinh
+fig, axes = plt.subplots(2, 2, figsize=(12, 10), dpi=300)
+models_pred = [
+    ('Logistic Regression', lr_y_pred, lr_y_prob),
+    ('k-NN', knn_y_pred, knn_y_prob),
+    ('Linear SVM', svm_linear_y_pred, svm_linear_y_prob),
+    ('RBF SVM', svm_rbf_y_pred, svm_rbf_y_prob)
+]
+
+for idx, (name, y_pred, y_prob) in enumerate(models_pred):
+    ax = axes[idx // 2, idx % 2]
+    cm = confusion_matrix(y_test, y_pred)
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax, cbar=False)
+    ax.set_title(f'{name} - Confusion Matrix', fontsize=11)
+    ax.set_xlabel('Predicted')
+    ax.set_ylabel('Actual')
+    ax.set_xticklabels(['0', '1'])
+    ax.set_yticklabels(['0', '1'])
+
+plt.tight_layout()
+fig.savefig('../notebooks/figures/confusion_matrices_all.png', dpi=300, bbox_inches='tight')
+plt.show()
+=== CODE CELL 33 ===
+# 11.2. ROC Curve so sanh 4 mo hinh
+fig, ax = plt.subplots(figsize=(8, 7), dpi=300)
+
+colors = ['#2b5c8f', '#d9534f', '#5cb85c', '#f0ad4e']
+for idx, (name, y_pred, y_prob) in enumerate(models_pred):
+    fpr, tpr, _ = roc_curve(y_test, y_prob)
+    auc = roc_auc_score(y_test, y_prob)
+    ax.plot(fpr, tpr, color=colors[idx], lw=2, label=f'{name} (AUC = {auc:.4f})')
+
+ax.plot([0, 1], [0, 1], '--', color='gray', lw=1, label='Random (AUC = 0.50)')
+ax.set_xlabel('False Positive Rate (1 - Specificity)', fontsize=11)
+ax.set_ylabel('True Positive Rate (Sensitivity / Recall)', fontsize=11)
+ax.set_title('ROC Curve Comparison - All Models (Test Set)', fontsize=12, pad=15)
+ax.legend(loc='lower right', fontsize=10)
+ax.grid(True, alpha=0.3)
+plt.tight_layout()
+fig.savefig('../notebooks/figures/roc_curve_comparison.png', dpi=300, bbox_inches='tight')
+plt.show()
+=== CODE CELL 35 ===
+# 12.1. Cau hinh Learning Curve
+train_sizes = np.linspace(0.1, 1.0, 6)
+
+def plot_learning_curve(estimator, title, X, y, cv, train_sizes, scoring='roc_auc',
+                        figsize=(7, 5), save_path=None):
+    train_sizes_abs, train_scores, test_scores = learning_curve(
+        estimator, X, y,
+        cv=cv,
+        scoring=scoring,
+        train_sizes=train_sizes,
+        n_jobs=-1,
+        shuffle=True,
+        random_state=42
+    )
+
+    train_mean = np.mean(train_scores, axis=1)
+    train_std = np.std(train_scores, axis=1)
+    test_mean = np.mean(test_scores, axis=1)
+    test_std = np.std(test_scores, axis=1)
+
+    fig, ax = plt.subplots(figsize=figsize, dpi=300)
+    ax.plot(train_sizes_abs, train_mean, 'o-', color='#2b5c8f', label='Training Score')
+    ax.fill_between(train_sizes_abs, train_mean - train_std, train_mean + train_std,
+                    alpha=0.2, color='#2b5c8f')
+    ax.plot(train_sizes_abs, test_mean, 'o-', color='#d9534f', label='Cross-Validation Score')
+    ax.fill_between(train_sizes_abs, test_mean - test_std, test_mean + test_std,
+                    alpha=0.2, color='#d9534f')
+
+    ax.set_xlabel('Training Set Size', fontsize=11)
+    ax.set_ylabel('ROC-AUC Score', fontsize=11)
+    ax.set_title(title, fontsize=12, pad=15)
+    ax.legend(loc='lower right', fontsize=10)
+    ax.grid(True, alpha=0.3)
+    ax.set_ylim(0.5, 1.0)
+    plt.tight_layout()
+
+    if save_path:
+        fig.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.show()
+
+    return train_sizes_abs, train_scores, test_scores
+=== CODE CELL 36 ===
+# 12.2. Learning Curve - Logistic Regression Baseline
+print('Dang ve Learning Curve cho Logistic Regression...')
+lr_train_sizes, lr_train_scores, lr_test_scores = plot_learning_curve(
+    lr_pipeline,
+    'Learning Curve - Logistic Regression Baseline',
+    X_train, y_train,
+    cv=cv,
+    train_sizes=train_sizes,
+    save_path='../notebooks/figures/baseline_learning_curve.png'
+)
+=== CODE CELL 37 ===
+# 12.3. Learning Curve - k-NN
+print('Dang ve Learning Curve cho k-NN...')
+knn_train_sizes, knn_train_scores, knn_test_scores = plot_learning_curve(
+    best_knn,
+    'Learning Curve - k-NN (Best Model)',
+    X_train, y_train,
+    cv=cv,
+    train_sizes=train_sizes,
+    save_path='../notebooks/figures/knn_learning_curve.png'
+)
+=== CODE CELL 38 ===
+# 12.4. Learning Curve - Linear SVM
+print('Dang ve Learning Curve cho Linear SVM...')
+svm_linear_train_sizes, svm_linear_train_scores, svm_linear_test_scores = plot_learning_curve(
+    best_svm_linear,
+    'Learning Curve - Linear SVM (Best Model)',
+    X_train, y_train,
+    cv=cv,
+    train_sizes=train_sizes,
+    save_path='../notebooks/figures/svm_linear_learning_curve.png'
+)
+=== CODE CELL 39 ===
+# 12.5. Learning Curve - RBF SVM
+print('Dang ve Learning Curve cho RBF SVM...')
+svm_rbf_train_sizes, svm_rbf_train_scores, svm_rbf_test_scores = plot_learning_curve(
+    best_svm_rbf,
+    'Learning Curve - RBF SVM (Best Model)',
+    X_train, y_train,
+    cv=cv,
+    train_sizes=train_sizes,
+    save_path='../notebooks/figures/svm_rbf_learning_curve.png'
+)
+=== CODE CELL 41 ===
+# 13.1. Ham ve Validation Curve
+def plot_validation_curve(estimator, title, X, y, param_name, param_range, cv,
+                          scoring='roc_auc', figsize=(7, 5), save_path=None):
+    train_scores, test_scores = validation_curve(
+        estimator, X, y,
+        param_name=param_name,
+        param_range=param_range,
+        cv=cv,
+        scoring=scoring,
+        n_jobs=-1
+    )
+
+    train_mean = np.mean(train_scores, axis=1)
+    train_std = np.std(train_scores, axis=1)
+    test_mean = np.mean(test_scores, axis=1)
+    test_std = np.std(test_scores, axis=1)
+
+    fig, ax = plt.subplots(figsize=figsize, dpi=300)
+    ax.plot(param_range, train_mean, 'o-', color='#2b5c8f', label='Training Score')
+    ax.fill_between(param_range, train_mean - train_std, train_mean + train_std,
+                    alpha=0.2, color='#2b5c8f')
+    ax.plot(param_range, test_mean, 'o-', color='#d9534f', label='Cross-Validation Score')
+    ax.fill_between(param_range, test_mean - test_std, test_mean + test_std,
+                    alpha=0.2, color='#d9534f')
+
+    ax.set_xlabel(param_name.replace('classifier__', ''), fontsize=11)
+    ax.set_ylabel('ROC-AUC Score', fontsize=11)
+    ax.set_title(title, fontsize=12, pad=15)
+    ax.legend(loc='lower right', fontsize=10)
+    ax.grid(True, alpha=0.3)
+    ax.set_ylim(0.5, 1.0)
+    
+    if all(isinstance(x, (int, float)) and x > 0 for x in param_range):
+        if max(param_range) / min(param_range) > 10:
+            ax.set_xscale('log')
+
+    plt.tight_layout()
+
+    if save_path:
+        fig.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.show()
+
+    return train_scores, test_scores
+=== CODE CELL 42 ===
+# 13.2. Validation Curve - k-NN: n_neighbors
+print('Dang ve Validation Curve cho k-NN (n_neighbors)...')
+knn_param_range = [1, 3, 5, 7, 9, 11, 13, 15, 19, 25, 31]
+knn_val_train, knn_val_test = plot_validation_curve(
+    knn_pipeline,
+    'Validation Curve - k-NN: n_neighbors',
+    X_train, y_train,
+    param_name='classifier__n_neighbors',
+    param_range=knn_param_range,
+    cv=cv,
+    save_path='../notebooks/figures/knn_validation_curve.png'
+)
+=== CODE CELL 43 ===
+# 13.3. Validation Curve - Linear SVM: C
+print('Dang ve Validation Curve cho Linear SVM (C)...')
+svm_linear_param_range = [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+svm_linear_val_train, svm_linear_val_test = plot_validation_curve(
+    svm_linear_pipeline,
+    'Validation Curve - Linear SVM: C',
+    X_train, y_train,
+    param_name='classifier__C',
+    param_range=svm_linear_param_range,
+    cv=cv,
+    save_path='../notebooks/figures/svm_linear_validation_curve.png'
+)
+=== CODE CELL 44 ===
+# 13.4. Validation Curve - RBF SVM: C (voi gamma tot nhat)
+print('Dang ve Validation Curve cho RBF SVM (C)...')
+best_gamma = svm_rbf_grid.best_params_['classifier__gamma']
+svm_rbf_pipeline_fixed_gamma = Pipeline(steps=[
+    ('preprocessor', get_preprocessor_pipeline()),
+    ('classifier', SVC(kernel='rbf', gamma=best_gamma, probability=True, random_state=42))
+])
+svm_rbf_param_range = [0.01, 0.1, 1, 10, 100, 1000]
+svm_rbf_val_train, svm_rbf_val_test = plot_validation_curve(
+    svm_rbf_pipeline_fixed_gamma,
+    f'Validation Curve - RBF SVM: C (gamma={best_gamma})',
+    X_train, y_train,
+    param_name='classifier__C',
+    param_range=svm_rbf_param_range,
+    cv=cv,
+    save_path='../notebooks/figures/svm_rbf_validation_curve.png'
+)
