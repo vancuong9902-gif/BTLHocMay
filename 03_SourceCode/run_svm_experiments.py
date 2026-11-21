@@ -13,7 +13,7 @@ from src.features import load_and_split_data, get_preprocessor_pipeline
 from sklearn.model_selection import StratifiedKFold, GridSearchCV, cross_validate
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
-from sklearn.metrics import roc_auc_score, recall_score, f1_score, precision_score, accuracy_score
+from sklearn.metrics import roc_auc_score, recall_score, f1_score, precision_score, accuracy_score, confusion_matrix
 
 # Load data
 data_path = str(Path(__file__).resolve().parent / 'data' / 'framingham.csv')
@@ -28,7 +28,7 @@ svm_linear_pipeline = Pipeline(steps=[
     ('classifier', SVC(kernel='linear', probability=True, random_state=42))
 ])
 
-param_grid_svm_linear = {'classifier__C': [0.01, 0.1, 1, 10, 100], 'classifier__class_weight': [None, 'balanced']}
+param_grid_svm_linear = {'classifier__C': [0.01, 0.1, 1, 10, 100], 'classifier__class_weight': ['balanced']}
 
 start = time.time()
 svm_linear_grid = GridSearchCV(
@@ -61,7 +61,12 @@ svm_linear_test_metrics = {
     'Precision': precision_score(y_test, svm_linear_y_pred),
     'Accuracy': accuracy_score(y_test, svm_linear_y_pred)
 }
+_cm = confusion_matrix(y_test, svm_linear_y_pred)
+_tn, _fp, _fn, _tp = _cm.ravel()
+svm_linear_test_metrics['Specificity'] = _tn / (_tn + _fp)
+svm_linear_test_metrics['Balanced Accuracy'] = (svm_linear_test_metrics['Recall'] + svm_linear_test_metrics['Specificity']) / 2
 print("Test metrics:", svm_linear_test_metrics)
+print("Confusion matrix:\n", _cm)
 
 # Save best model and metrics for later use
 import joblib
@@ -79,7 +84,7 @@ svm_rbf_pipeline = Pipeline(steps=[
 param_grid_svm_rbf = {
     'classifier__C': [0.1, 1, 10, 100],
     'classifier__gamma': ['scale', 0.01, 0.1, 1],
-    'classifier__class_weight': [None, 'balanced']
+    'classifier__class_weight': ['balanced']
 }
 
 total = len(param_grid_svm_rbf['classifier__C']) * len(param_grid_svm_rbf['classifier__gamma'])
@@ -116,7 +121,12 @@ svm_rbf_test_metrics = {
     'Precision': precision_score(y_test, svm_rbf_y_pred),
     'Accuracy': accuracy_score(y_test, svm_rbf_y_pred)
 }
+_cm = confusion_matrix(y_test, svm_rbf_y_pred)
+_tn, _fp, _fn, _tp = _cm.ravel()
+svm_rbf_test_metrics['Specificity'] = _tn / (_tn + _fp)
+svm_rbf_test_metrics['Balanced Accuracy'] = (svm_rbf_test_metrics['Recall'] + svm_rbf_test_metrics['Specificity']) / 2
 print("Test metrics:", svm_rbf_test_metrics)
+print("Confusion matrix:\n", _cm)
 
 # Save
 joblib.dump(best_svm_rbf, str(Path(__file__).resolve().parent / 'models' / 'best_svm_rbf.joblib'))

@@ -1,2 +1,2 @@
-classifier__estimator__C
-0.1
+classifier__C,classifier__class_weight
+0.01,balanced

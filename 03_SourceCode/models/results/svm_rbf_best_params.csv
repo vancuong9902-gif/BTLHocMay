@@ -1,2 +1,2 @@
-classifier__C,classifier__gamma
-0.1,0.1
+classifier__C,classifier__class_weight,classifier__gamma
+1,balanced,0.01
