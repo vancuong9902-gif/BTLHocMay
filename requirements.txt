@@ -1,0 +1,29 @@
+# ========================================
+# BTL Hoc May - Framingham Heart Study
+# Danh sach thu vien chuan cho ca nhom
+# ========================================
+
+# Thu vien xu ly du lieu
+pandas==2.2.3
+numpy==1.26.4
+
+# Thu vien hoc may
+scikit-learn==1.5.2
+
+# Thu vien truc quan hoa
+matplotlib==3.9.2
+seaborn==0.13.2
+
+# Thu vien ho tro
+scipy==1.14.1
+statsmodels==0.14.4
+joblib==1.4.2
+
+# Jupyter Notebook (tuy chon)
+jupyter==1.1.1
+notebook==7.3.2
+
+# ========================================
+# Huong dan cai dat:
+#   pip install -r requirements.txt
+# ========================================
