@@ -125,6 +125,7 @@ def predict_from_csv(model, scaler, csv_path):
 
 
 def main():
+    global MODEL_PATH, SCALER_PATH
     parser = argparse.ArgumentParser(
         description="Dự đoán nguy cơ bệnh tim mạch 10 năm - Framingham Heart Study"
     )
@@ -143,7 +144,6 @@ def main():
 
     args = parser.parse_args()
 
-    global MODEL_PATH, SCALER_PATH
     MODEL_PATH = args.model
     SCALER_PATH = args.scaler
 
